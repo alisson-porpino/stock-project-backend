@@ -1,87 +1,175 @@
-# stock-control-backend
+# Stock Control — Backend API
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Manufacturing stock control REST API built with **Java 17**, **Quarkus 3**, and **PostgreSQL**.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+> Technical test — Junior Full Stack Developer position at Projedata.
 
-## Running the application in dev mode
+## Features
 
-You can run your application in dev mode that enables live coding using:
+- **Products**: Full CRUD for manufactured products
+- **Raw Materials**: Stock management with quantity tracking
+- **Product-Material Association**: Define which raw materials compose each product and their quantities
+- **Production Suggestions**: Greedy algorithm that calculates optimal production based on available stock, prioritizing highest-value products
+- **Automated Tests**: Unit and integration tests with JUnit 5 + REST Assured
+- **API Documentation**: Interactive Swagger UI
 
-```shell script
+## Tech Stack
+
+| Layer        | Technology                          |
+|-------------|-------------------------------------|
+| Language    | Java 17                             |
+| Framework   | Quarkus 3.32                        |
+| ORM         | Hibernate ORM with Panache          |
+| Database    | PostgreSQL 13                       |
+| Validation  | Hibernate Validator (Bean Validation)|
+| Tests       | JUnit 5 + REST Assured              |
+| Docs        | SmallRye OpenAPI (Swagger)          |
+| Build       | Maven (via wrapper)                 |
+| Container   | Docker + Docker Compose             |
+
+## Architecture
+
+```
+HTTP Request → Resource (REST Controller)
+                   ↓
+               Service (Business Logic)
+                   ↓
+               Repository (Data Access / Panache)
+                   ↓
+               Entity (JPA / Database)
+```
+
+Three-layer architecture following SOLID principles. DTOs separate the API contract from the database model.
+
+## API Endpoints
+
+### Products (`/api/products`)
+| Method | Endpoint              | Description         |
+|--------|----------------------|---------------------|
+| GET    | `/api/products`       | List all products   |
+| GET    | `/api/products/{id}`  | Get product by ID   |
+| POST   | `/api/products`       | Create product      |
+| PUT    | `/api/products/{id}`  | Update product      |
+| DELETE | `/api/products/{id}`  | Delete product      |
+
+### Raw Materials (`/api/raw-materials`)
+| Method | Endpoint                  | Description            |
+|--------|--------------------------|------------------------|
+| GET    | `/api/raw-materials`      | List all materials     |
+| GET    | `/api/raw-materials/{id}` | Get material by ID     |
+| POST   | `/api/raw-materials`      | Create material        |
+| PUT    | `/api/raw-materials/{id}` | Update material/stock  |
+| DELETE | `/api/raw-materials/{id}` | Delete material        |
+
+### Product Materials (`/api/products/{productId}/materials`)
+| Method | Endpoint                                           | Description                |
+|--------|---------------------------------------------------|----------------------------|
+| GET    | `/api/products/{productId}/materials`              | List materials for product |
+| POST   | `/api/products/{productId}/materials`              | Add material to product    |
+| PUT    | `/api/products/{productId}/materials/{materialId}` | Update quantity needed     |
+| DELETE | `/api/products/{productId}/materials/{materialId}` | Remove material            |
+
+### Production Suggestions (`/api/production-suggestions`)
+| Method | Endpoint                        | Description               |
+|--------|---------------------------------|---------------------------|
+| GET    | `/api/production-suggestions`   | Calculate production plan |
+
+## Production Suggestion Algorithm
+
+The algorithm uses a **Greedy strategy** to determine what to manufacture:
+
+1. Sort all products by value (descending)
+2. For each product, calculate the maximum producible quantity based on available stock
+3. "Consume" raw materials from a virtual stock copy
+4. Move to the next product with the remaining stock
+
+**Time Complexity**: O(P × M) where P = products, M = materials per product
+
+This approach was chosen because the requirement specifies prioritization by value, not global optimization (which would require Integer Linear Programming).
+
+## Quick Start
+
+### Prerequisites
+- Java 17+ (recommended: install via [SDKMAN](https://sdkman.io/))
+- Docker and Docker Compose
+
+### Option 1: Docker Compose (Recommended)
+
+```bash
+# Build the JAR
+./mvnw package -DskipTests
+
+# Start all services (PostgreSQL + Backend)
+docker compose up --build
+
+# Access:
+# API:     http://localhost:8080/api/products
+# Swagger: http://localhost:8080/q/swagger-ui
+```
+
+### Option 2: Development Mode
+
+```bash
+# Start only PostgreSQL
+docker compose up db -d
+
+# Run Quarkus in dev mode (hot reload)
 ./mvnw quarkus:dev
+
+# Access:
+# API:     http://localhost:8080/api/products
+# Swagger: http://localhost:8080/q/swagger-ui
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+### Stopping
 
-## Packaging and running the application
-
-The application can be packaged using:
-
-```shell script
-./mvnw package
+```bash
+# Stop all containers and remove volumes
+docker compose down -v
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+## Running Tests
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+```bash
+./mvnw test
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+17 tests across 3 test classes:
+- **ProductResourceTest** (9 tests) — CRUD operations, validation, 404 handling
+- **ProductionSuggestionServiceTest** (5 tests) — Algorithm logic with multiple scenarios
+- **ProductionSuggestionResourceTest** (3 tests) — End-to-end HTTP flow
 
-## Creating a native executable
+## Project Structure
 
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
+```
+src/main/java/com/stockproject/stock/
+├── dto/                          # Data Transfer Objects
+│   ├── ProductDTO.java
+│   ├── RawMaterialDTO.java
+│   ├── ProductMaterialDTO.java
+│   └── ProductionSuggestionDTO.java
+├── entity/                       # JPA Entities
+│   ├── Product.java
+│   ├── RawMaterial.java
+│   └── ProductMaterial.java
+├── repository/                   # Data Access Layer (Panache)
+│   ├── ProductRepository.java
+│   ├── RawMaterialRepository.java
+│   └── ProductMaterialRepository.java
+├── service/                      # Business Logic
+│   ├── ProductService.java
+│   ├── RawMaterialService.java
+│   ├── ProductMaterialService.java
+│   └── ProductionSuggestionService.java
+└── resource/                     # REST Controllers
+    ├── ProductResource.java
+    ├── RawMaterialResource.java
+    ├── ProductMaterialResource.java
+    ├── ProductionSuggestionResource.java
+    ├── ErrorMapper.java
+    └── CorsFilter.java
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+## Related
 
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/stock-control-backend-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Related Guides
-
-- REST resources for Hibernate ORM with Panache ([guide](https://quarkus.io/guides/rest-data-panache)): Generate Jakarta REST resources for your Hibernate Panache entities and repositories
-- Hibernate Validator ([guide](https://quarkus.io/guides/validation)): Validate object properties (field, getter) and method parameters for your beans (REST, CDI, Jakarta Persistence)
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
-- Hibernate ORM with Panache ([guide](https://quarkus.io/guides/hibernate-orm-panache)): Simplify your persistence code for Hibernate ORM via the active record or the repository pattern
-- JDBC Driver - PostgreSQL ([guide](https://quarkus.io/guides/datasource)): Connect to the PostgreSQL database via JDBC
-
-## Provided Code
-
-### Hibernate ORM
-
-Create your first JPA entity
-
-[Related guide section...](https://quarkus.io/guides/hibernate-orm)
-
-
-[Related Hibernate with Panache section...](https://quarkus.io/guides/hibernate-orm-panache)
-
-
-### REST Data with Panache
-
-Generating Jakarta REST resources with Panache
-
-[Related guide section...](https://quarkus.io/guides/rest-data-panache)
-
-
-### REST
-
-Easily start your REST Web Services
-
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+- **Frontend**: [stock-project-frontend](https://github.com/alisson-porpino/stock-project-frontend) — React + Redux
